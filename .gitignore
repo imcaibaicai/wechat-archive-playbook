@@ -1,0 +1,24 @@
+# 隐私数据：永不提交
+*.db
+*.decrypted.db
+keys.txt
+found_keys.txt
+CORRECT_KEY.txt
+
+# 导出产物
+/export/
+/export_*/
+archive.md
+*.diary.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
