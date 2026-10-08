@@ -12,7 +12,10 @@ import os
 import sqlite3
 from datetime import datetime
 
-from .content import clean_message_content, safe_decode
+try:  # 包内运行（python -m src.cli）
+    from .content import clean_message_content, safe_decode
+except ImportError:  # 扁平脚本运行（python scripts/cli.py）
+    from content import clean_message_content, safe_decode  # type: ignore
 
 WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 

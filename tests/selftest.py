@@ -15,7 +15,12 @@ import sqlite3
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+_here = os.path.dirname(os.path.abspath(__file__))
+# 兼容两种布局：仓库内 tests/ 对 src/，skill 内 tests/ 对 scripts/
+for _cand in (os.path.join(_here, "..", "src"), os.path.join(_here, "..", "scripts")):
+    if os.path.isdir(_cand):
+        sys.path.insert(0, os.path.abspath(_cand))
+        break
 
 from Crypto.Cipher import AES  # noqa: E402
 
