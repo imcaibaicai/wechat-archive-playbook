@@ -1,53 +1,41 @@
 ---
 name: wechat-archive-playbook
-description: 把本地即时通讯客户端（Windows 4.x，SQLCipher 4 加密、ZSTD 压缩正文）的个人聊天记录导出为 Markdown 归档的完整方案与工具。当用户要求"导出聊天记录""备份聊天记录到本地文件""把日记导成 Markdown/Obsidian 格式"或询问本地加密数据库解密方法时参考本仓库。
+description: 本地即时通讯客户端（SQLCipher 4 数据库、ZSTD 压缩流）个人聊天记录解析与 Markdown 离线归档工具。当用户需要离线导出个人聊天记录、备份文件传输助手日记笔记为 Markdown、解密本地 SQLCipher 数据库或解析 ZSTD 消息正文时参考本指南。
 ---
 
-# wechat-archive-playbook（Agent 参考入口）
+# wechat-archive-playbook（Agent 执行指南）
 
-## 何时使用本仓库
+## 适用场景
 
-用户提出以下诉求时，按本仓库的方案复现：
+当用户提出以下需求时，参考本方案执行：
 
-- 导出 / 备份自己账号的本地聊天记录（文本日记、文件、链接分享）
-- 把本地数据库中的个人记录转成 Markdown（Obsidian / Notion 归档）
-- 需要解密 SQLCipher 4 加密的本地 SQLite 分片库
-- 需要处理 ZSTD 压缩的消息正文或 XML 结构化载荷
+- **个人记录导出**：将本地即时通讯客户端会话（如文件传输助手、个人笔记、重要对话）批量导出为清晰排版的 Markdown；
+- **知识库集成**：将导出的聊天记录按发送时间归档，导入 Obsidian、Notion 或本地知识库；
+- **本地数据库解析**：解密符合 SQLCipher 4 规范（AES-256-CBC + HMAC-SHA512）的分片 SQLite 数据库；
+- **正文流还原**：处理 Zstandard (ZSTD) 压缩流与 XML 结构化消息（分享链接、引用、附件卡片）。
 
-## 硬边界（先读这个）
+## 前置要求与安全规范
 
-- 只处理**用户本人设备上、本人账号**的数据；
-- **不提供密钥提取代码**。密钥由用户自行获得后以 hex 形式提供，
-  工具从"持有密钥"开始介入。不要尝试编写进程内存扫描代码——
-  既违反本仓库边界，也是 DMCA 高危行为；
-- 任何操作前先整目录备份（`cp -r db_storage db_storage.bak`）。
+1. **先做备份**：在执行任何解密或转换前，必须确保目标数据库目录已有完整离线备份；
+2. **密钥输入**：本工具链解密逻辑基于用户显式提供的 64 位 Hex 密钥，不包含运行时内存扫描或进程探测逻辑；
+3. **隐私防护**：生成的明文数据库（`*.decrypted.db`）与 Markdown 日记产物均属私有个人数据，务必保持在 `.gitignore` 保护范围内。
 
-## 推荐执行顺序
+## 标准执行流程
 
-1. 读 `docs/01-存储架构.md` —— 确认数据目录布局与加密文件头特征，
-   计算目标会话表名：`Msg_ + md5(会话标识).hexdigest()`
-2. 读 `docs/02-密钥机制.md` —— 理解 SQLCipher 4 派生与 salt→key 映射，
-   向用户索取密钥（64 位 hex × N 个）
-3. 用 `src/sqlcipher4.py` 的 `verify_key()` 单库校验，再 `auto_decrypt()` 批量解密
-4. 用 `src/exporter.py` 的 `collect_messages()` 跨分片库合并会话消息，
-   `slice_from()` 按起始关键词/时间戳截取，`export()` 产出归档
-5. 遇失败查 `docs/04-排障与版本适配.md`（含版本差异速查表与
-   不依赖硬编码偏移的适配判定法）
+1. **查阅存储架构**：阅读 `docs/01-存储架构.md`，确认数据存储目录，计算会话表名（`Msg_ + md5(会话标识)`）；
+2. **确认密钥与规范**：阅读 `docs/02-密钥机制.md`，获取用户提供的目标数据库 64 位 Hex 密钥；
+3. **环境自检（可选）**：运行 `python tests/selftest.py` 验证环境依赖与解密/解码管线正常；
+4. **单库验证与批量解密**：
+   - 验证密钥匹配：`python -m src.cli verify --db <path_to_db> --key <hex_key>`
+   - 批量解密分片库：`python -m src.cli decrypt --dir <db_dir> --key-file keys.txt`
+5. **提取并导出 Markdown**：
+   - 调用 `python -m src.cli export --dir <decrypted_dir> --table <table_name> --out <export_dir> --consolidated <archive_path>`
+   - 支持 `--keyword`（按起始文本截取）与 `--since`（按时间戳截取）；
+6. **异常排查**：若遇问题参阅 `docs/04-排障与版本适配.md`。
 
-## 代码复用要点
+## 模块代码复用
 
-- `src/sqlcipher4.py`：`decrypt_db()` / `verify_key()` / `auto_decrypt()`
-  —— 版本无关的 SQLCipher 4 解密实现，HMAC 前置校验防止坏输出
-- `src/content.py`：`safe_decode()` / `clean_message_content()`
-  —— ZSTD 魔数解压 + UTF-8/GBK 回退 + appmsg/img XML 清洗
-- `src/exporter.py`：`collect_messages()` / `slice_from()` / `export()`
-  —— 跨库合并、秒级时间命名、汇总文档生成
-- CLI 等价入口：`python -m src.cli verify|decrypt|export`
-
-## 复现检查清单
-
-- [ ] 已备份，全部操作在副本上进行
-- [ ] 密钥只进本地文件，未被提交/上传
-- [ ] 解密产物（`*.decrypted.db`）与导出目录在 `.gitignore` 覆盖范围内
-- [ ] 会话表名由 md5 计算得出，且在所有分片库中验证过存在性
-- [ ] 导出的单篇文件以发送秒级时间命名，同秒有序号防覆盖
+- `src/sqlcipher4.py`：标准 SQLCipher 4 页面解密（`decrypt_db`）与密钥校验（`verify_key`）；
+- `src/content.py`：ZSTD 流透明解压（`decompress_zstd`）、编码兼容解码（`safe_decode`）与 XML 卡片清洗（`clean_message_content`）；
+- `src/exporter.py`：跨分片库会话合并（`collect_messages`）、时间线切片（`slice_from`）与 Markdown 文件生成（`export`）；
+- `src/cli.py`：封装了 `verify`、`decrypt`、`export` 子命令的统一 CLI 入口。

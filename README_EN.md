@@ -1,104 +1,109 @@
 # wechat-archive-playbook
 
-**A local-first playbook and toolkit for archiving personal chat history** — SQLCipher 4 decryption · ZSTD content decoding · Markdown export
+**Offline Archiving Toolkit and Playbook for Local Chat Databases** — SQLCipher 4 Decryption · Zstandard Decompression · Markdown Export
 
-> 中文说明见 [README.md](README.md)。
+> Chinese documentation: [README.md](README.md)
 
-## What this is
+---
 
-A **reproducible end-to-end playbook plus process scripts**: take the encrypted
-sharded databases of a local instant-messaging client (Windows 4.x architecture),
-decrypt them, decode the message bodies, and export everything into Markdown
-files named by their exact send timestamps.
+## Overview
 
-It is deliberately **not** a turnkey cracking tool:
+`wechat-archive-playbook` is an offline toolkit and playbook designed for parsing and exporting local chat history databases.
 
-- **No key-extraction code is included.** Keys are supplied by the user; the
-  toolkit starts at "you already hold the key" — no memory scanning, no
-  process instrumentation, no version-specific offsets;
-- Every script is fully parameterized: no hardcoded account IDs, absolute
-  paths, PIDs, or memory addresses;
-- All private artifacts (key files, decrypted databases, diary exports) are
-  excluded via `.gitignore`.
-
-Because of that boundary, this repo is safe to publish, cite, and hand to
-other agents: `src/` is clean data-interop code (aligned with the public
-SQLCipher specification), and `docs/` is the methodology to reproduce the
-whole pipeline.
+In modern desktop messaging client architectures, data is often stored using modular sharded databases, SQLCipher 4 page-level encryption, and Zstandard (ZSTD) compressed message bodies. This project provides an end-to-end workflow and reusable scripts to decrypt database shards, decode message content, and convert conversation logs into clean, readable Markdown files suitable for long-term storage or import into knowledge management tools like Obsidian and Notion.
 
 ## Features
 
-- **SQLCipher 4 page-level decryption**: HMAC-SHA512 pre-verification
-  (a wrong key never produces a garbage output file), per-page AES-256-CBC,
-  automatic salt→key matching across sharded databases
-- **Transparent ZSTD decoding**: magic-number detection, decompression,
-  UTF-8/GBK fallback
-- **XML payload cleaning**: shared links, file attachments and image
-  placeholders rendered as readable Markdown
-- **Timestamp-based archiving**: per-second file naming plus a consolidated
-  document grouped by date
-- **Session table resolution**: the `Msg_ + md5(session id)` rule and
-  cross-shard merging
+- **Standard SQLCipher 4 Decryption**: Follows the official SQLCipher 4 specification with HMAC-SHA512 integrity verification and per-page AES-256-CBC decryption, supporting multi-salt batch operations across shards;
+- **Transparent Decompression**: Automatic ZSTD magic byte detection and decompression, with fallback support for UTF-8 and GBK encodings;
+- **Rich Message Parsing**: Cleans and formats structured XML payloads (cards, shared links, image placeholders, and file attachments) into clean Markdown quotes and links;
+- **Timeline-based Exporting**: Exports messages into individual Markdown notes named by exact second-level timestamps, with optional consolidated timeline files grouped by date;
+- **Session Resolution & Shard Merging**: Computes session table names via MD5 hashing and automatically aggregates messages spanning multiple database shards;
+- **Fully Offline & Decoupled**: Operates purely on local database files with no external network requests or dependencies on specific client runtimes.
 
-## Quick start
+## Design Architecture
+
+This project focuses on the **data parsing and format transformation layer**:
+
+1. **Explicit Key Input**: Decryption routines accept user-supplied 64-character hexadecimal keys via CLI flags or local key files;
+2. **Decoupled Workflow**: Scripts operate directly on database file copies and do not interact with active processes;
+3. **Data Privacy**: Local database files, decrypted outputs, and generated personal notes are excluded by default via `.gitignore` to prevent unintended leakage.
+
+## Quick Start
+
+### 1. Installation
 
 ```bash
 pip install -r requirements.txt
+```
 
-# 0. Self-test: build an encrypted db -> decrypt -> byte-exact round-trip
-#    (no real data needed)
+### 2. Run Self-Test (Optional)
+
+Verify the complete decryption and decoding pipeline using a synthesized in-memory test database (requires no real user data):
+
+```bash
 python tests/selftest.py
+```
 
-# 1. Verify a key matches a database (no output file written)
-python -m src.cli verify --db message_0.db --key <64-hex>
+### 3. Verify Database Key
 
-# 2. Batch-decrypt every sharded database in a directory
+Test whether a given 64-hex key matches an encrypted database shard (verification only; writes no files):
+
+```bash
+python -m src.cli verify --db message_0.db --key <64-hex-key>
+```
+
+### 4. Batch Decrypt Database Shards
+
+Batch decrypt encrypted `.db` files into standard SQLite format (`.decrypted.db`):
+
+```bash
 python -m src.cli decrypt --dir ./db_storage --key-file keys.txt
+```
 
-# 3. Export a session to Markdown (files named by exact send time)
+### 5. Export Conversation to Markdown
+
+Extract and format messages for a specific session table into Markdown files:
+
+```bash
 python -m src.cli export --dir ./decrypted_dbs --table Msg_<md5> \
-    --keyword "a phrase from the first message" \
+    --keyword "initial search phrase" \
     --out ./export --consolidated ./archive.md
 ```
 
-Full walkthrough, directory layout and table-name computation:
-[docs/03-全链路流程.md](docs/03-全链路流程.md) (Chinese).
+> For table-name computation and detailed step-by-step guidance, see [docs/03-全链路流程.md](docs/03-全链路流程.md).
 
-## Documentation index
+## Documentation
 
-| Document | Contents |
-|----------|----------|
-| [docs/01-存储架构.md](docs/01-存储架构.md) | Storage layout, encrypted file header, ZSTD, `Msg_<md5>` session-table rule (ZH) |
-| [docs/02-密钥机制.md](docs/02-密钥机制.md) | SQLCipher 4 key derivation, salt→key mapping, user-supplied-key boundary (ZH) |
-| [docs/03-全链路流程.md](docs/03-全链路流程.md) | Five-step runbook: backup → decrypt → locate → export (ZH) |
-| [docs/04-排障与版本适配.md](docs/04-排障与版本适配.md) | 3.x→4.x differences, failure modes, offset-free adaptation method (ZH) |
-| [USE_POLICY.md](USE_POLICY.md) | Use boundary and disclaimer (ZH) |
-| [SKILL.md](SKILL.md) | Agent-facing skill description (ZH) |
+| Document | Description |
+| :--- | :--- |
+| [docs/01-存储架构.md](docs/01-存储架构.md) | Storage layout, database headers, ZSTD compression, and session table mapping |
+| [docs/02-密钥机制.md](docs/02-密钥机制.md) | SQLCipher 4 page encryption, salt handling, and key derivation principles |
+| [docs/03-全链路流程.md](docs/03-全链路流程.md) | Complete step-by-step guide: backup, decrypt, locate, and export |
+| [docs/04-排障与版本适配.md](docs/04-排障与版本适配.md) | Troubleshooting guide and version adaptation notes |
+| [SKILL.md](SKILL.md) | Specification guide for AI agents and automated workflows |
 
-## Repository layout
+## Repository Structure
 
-```
+```text
 wechat-archive-playbook/
-├── src/                    # Toolkit (no privacy hardcoding, version-agnostic)
-│   ├── sqlcipher4.py       #   SQLCipher 4 decryption & key verification
-│   ├── content.py          #   ZSTD decoding + XML payload cleaning
-│   ├── exporter.py         #   Markdown exporter
-│   └── cli.py              #   Command-line entry
-├── docs/                   # Methodology (Chinese)
-├── examples/               # Desensitized sample output
-├── tests/selftest.py       # End-to-end self-test (build->decrypt->byte-exact round-trip)
-├── USE_POLICY.md           # Use boundary (ZH)
-├── SKILL.md                # Agent entry point (ZH)
-└── requirements.txt
+├── src/                    # Core transformation scripts
+│   ├── sqlcipher4.py       #   SQLCipher 4 page decryption & verification
+│   ├── content.py          #   ZSTD decompression & XML cleaning
+│   ├── exporter.py         #   Markdown structured exporter
+│   └── cli.py              #   CLI entry point
+├── docs/                   # Methodological documentation
+├── examples/               # Sample output documents
+├── tests/selftest.py       # Standalone end-to-end self-test
+├── LICENSE                 # MIT License
+├── SKILL.md                # Agent instruction guide
+└── requirements.txt        # Python dependencies
 ```
 
-## Use boundary
+## Disclaimer
 
-For archiving **your own data on your own device** only.
-See [USE_POLICY.md](USE_POLICY.md). This project does not provide, contain,
-or intend to provide key extraction from, or access-control circumvention of,
-any commercial software.
+This project is intended strictly for personal technical research, study, and offline backup/migration of personal data. Users are responsible for ensuring they have lawful access to the data they process. The authors and contributors assume no liability for any data loss or misuse resulting from this software.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
