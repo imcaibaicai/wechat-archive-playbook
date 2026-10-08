@@ -16,9 +16,17 @@ cli.py — 命令行入口。
 """
 
 import argparse
+import os
 import sys
 
-from . import exporter, sqlcipher4
+# 兼容两种运行方式：python -m src.cli（包内相对导入）
+# 与 python scripts/cli.py / python src/cli.py（扁平脚本导入）
+try:
+    from . import exporter, sqlcipher4
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import exporter  # type: ignore
+    import sqlcipher4  # type: ignore
 
 
 def load_keys(args) -> list[str]:

@@ -2,6 +2,8 @@
 
 **本地聊天记录全链路归档方案与工具组件** — SQLCipher 4 解密 · ZSTD 内容解码 · Markdown 归档
 
+> **English**: [README_EN.md](README_EN.md)
+
 > English: A local-first playbook and toolkit for archiving personal chat
 > history stored in SQLCipher 4 encrypted databases (WCDB-style sharded
 > layout, ZSTD-compressed message bodies) into readable Markdown.
@@ -38,6 +40,9 @@
 ```bash
 pip install -r requirements.txt
 
+# 0. 自检：构造加密库 -> 解密 -> 字节级往返（无需任何真实数据）
+python tests/selftest.py
+
 # 1. 校验密钥与数据库是否匹配（不写盘）
 python -m src.cli verify --db message_0.db --key <64位hex>
 
@@ -73,6 +78,7 @@ wechat-archive-playbook/
 │   └── cli.py              #   命令行入口
 ├── docs/                   # 全链路方法论
 ├── examples/               # 脱敏示例输出
+├── tests/selftest.py       # 端到端自检（构造加密库→解密→字节级往返）
 ├── USE_POLICY.md           # 使用边界
 ├── SKILL.md                # Agent 参考入口
 └── requirements.txt

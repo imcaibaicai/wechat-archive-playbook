@@ -18,6 +18,7 @@ sqlcipher4.py — SQLCipher 4 加密数据库的页面级解密与密钥校验�
 import hashlib
 import hmac
 import os
+import struct
 
 from Crypto.Cipher import AES
 
@@ -30,14 +31,20 @@ RESERVE_SZ = (IV_SZ + HMAC_SZ + 15) // 16 * 16  # = 80
 SQLITE_FILE_HEADER = b"SQLite format 3\x00"
 
 
-def _page_mac_ok(page1: bytes, salt: bytes, rawkey: bytes) -> bool:
-    """校验页面 1 的 HMAC，用于在不写盘的情况下验证密钥是否正确。"""
+def _page_mac_ok(page: bytes, salt: bytes, rawkey: bytes, pgno: int = 1) -> bool:
+    """
+    校验某一页的 HMAC，用于在不写盘的情况下验证密钥是否正确。
+
+    HMAC 输入 = ciphertext || IV || pgno(4 字节)。
+    页码按 SQLCipher 默认的本机字节序拼接（x86/x64 为小端，
+    见 sqlcipher.c sqlcipher_page_hmac）。本模块只校验页面 1。
+    """
     mac_salt = bytes(x ^ 0x3A for x in salt)
     mac_key = hashlib.pbkdf2_hmac("sha512", rawkey, mac_salt, 2, KEY_SZ)
     mac = hmac.new(mac_key, digestmod="sha512")
-    mac.update(page1[:-RESERVE_SZ + IV_SZ])
-    mac.update(bytes.fromhex("01 00 00 00"))
-    return mac.digest() == page1[-RESERVE_SZ + IV_SZ:][:HMAC_SZ]
+    mac.update(page[:-RESERVE_SZ + IV_SZ])          # ciphertext + IV
+    mac.update(struct.pack("<I", pgno))             # 小端页码
+    return mac.digest() == page[-RESERVE_SZ + IV_SZ:][:HMAC_SZ]
 
 
 def verify_key(db_path: str, rawkey: bytes) -> bool:
@@ -76,7 +83,8 @@ def decrypt_db(db_path: str, rawkey: bytes, output_path: str | None = None) -> s
     with open(output_path, "wb") as f:
         f.write(SQLITE_FILE_HEADER)
         for page in pages:
-            if len(page) < PAGE_SZ:
+            # 第 1 页盐后仅 4080 字节；末页可能不足一页，至少需 reserve + 一个密文块
+            if len(page) < RESERVE_SZ + 16:
                 break
             iv = page[-RESERVE_SZ:][:IV_SZ]
             cipher = page[:-RESERVE_SZ]
